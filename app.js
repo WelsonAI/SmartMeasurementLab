@@ -29,7 +29,7 @@
         capacityRead: "Berapakah isi padu cecair ini?", more: "Bekas manakah mengandungi lebih banyak?", less: "Bekas manakah mengandungi lebih sedikit?",
         convert: "Tukarkan nilai ini."
       },
-      object: "Objek", mysteryMass: "Jisim misteri", container: "Bekas", blocks: "blok", cups: "cawan", units: "unit",
+      object: "Objek", mysteryMass: "Jisim misteri", chooseWeight: "Pilih pemberat", container: "Bekas", blocks: "blok", cups: "cawan", units: "unit",
       objectA: "Objek A", objectB: "Objek B", containerA: "Bekas A", containerB: "Bekas B",
       ready: "Pilih jawapan selepas memerhatikan alat ukuran.", readyConvert: "Masukkan nilai yang sesuai.",
       chooseFirst: "Pilih satu jawapan dahulu.", enterFirst: "Masukkan jawapan dahulu.", correct: "Betul!",
@@ -67,7 +67,7 @@
         capacityRead: "液体的体积是多少？", more: "哪一个容器的液体比较多？", less: "哪一个容器的液体比较少？",
         convert: "换算这个数值。"
       },
-      object: "物体", mysteryMass: "神秘质量", container: "容器", blocks: "个方块", cups: "杯", units: "个单位",
+      object: "物体", mysteryMass: "神秘物体", chooseWeight: "选择砝码", container: "容器", blocks: "个方块", cups: "杯", units: "个单位",
       objectA: "物体 A", objectB: "物体 B", containerA: "容器 A", containerB: "容器 B",
       ready: "观察测量工具后选择答案。", readyConvert: "输入正确的数值。",
       chooseFirst: "请先选择一个答案。", enterFirst: "请先输入答案。", correct: "答对了！",
@@ -106,7 +106,7 @@
         capacityRead: "What is the liquid volume?", more: "Which container holds more?", less: "Which container holds less?",
         convert: "Convert this value."
       },
-      object: "Object", mysteryMass: "Mystery mass", container: "Container", blocks: "blocks", cups: "cups", units: "units",
+      object: "Object", mysteryMass: "Mystery object", chooseWeight: "Choose a weight", container: "Container", blocks: "blocks", cups: "cups", units: "units",
       objectA: "Object A", objectB: "Object B", containerA: "Container A", containerB: "Container B",
       ready: "Observe the measuring tool, then choose an answer.", readyConvert: "Enter the matching value.",
       chooseFirst: "Choose an answer first.", enterFirst: "Enter an answer first.", correct: "Correct!",
@@ -209,11 +209,15 @@
   }
 
   function generateQuestion() {
+    if (state.mode === "convert" && state.level === "d1") {
+      state.level = "d2";
+      levelSelect.value = "d2";
+    }
     let question;
     const currentActivity = activity();
     if (state.mode === "length") question = currentActivity === "measure" ? makeLengthMeasure() : makeCompareQuestion("length");
     else if (state.mode === "mass") question = currentActivity === "balance" ? makeMassBalance() : makeCompareQuestion("mass");
-    else if (state.mode === "capacity") question = currentActivity === "read" ? makeCapacityRead() : makeCompareQuestion("capacity");
+    else if (state.mode === "capacity") question = currentActivity === "read" ? makeCapacityRead() : makeCapacityCompare();
     else question = makeConversion();
     setQuestion(question, false);
   }
@@ -234,27 +238,38 @@
     let unit;
     let max;
     let step;
+    let divisions;
+    let labelEvery;
     let visual = "ruler";
     if (targetValue != null) {
       target = Number(targetValue);
       unit = targetUnit;
-      max = Math.max(stepNice(target), target);
-      step = decimalStep(target);
       visual = unit === "blocks" ? "blocks" : "ruler";
+      if (unit === "blocks") {
+        max = target; step = 1; divisions = target; labelEvery = 1;
+      } else if (unit === "mm") {
+        max = 100; step = 1; divisions = 100; labelEvery = 10;
+      } else {
+        max = year >= 5 ? 10 : 10;
+        step = year >= 5 ? .1 : 1;
+        divisions = year >= 5 ? 100 : 10;
+        labelEvery = year >= 5 ? 10 : 1;
+      }
     } else if (year === 1) {
-      target = randomInt(2, 8); unit = "blocks"; max = target; step = 1; visual = "blocks";
+      target = randomInt(2, 8); unit = "blocks"; max = target; step = 1; divisions = target; labelEvery = 1; visual = "blocks";
     } else if (year === 2) {
-      target = randomInt(2, 10); unit = "cm"; max = 10; step = 1;
+      target = randomInt(2, 9); unit = "cm"; max = 10; step = 1; divisions = 10; labelEvery = 1;
     } else if (year === 3) {
-      unit = Math.random() < .35 ? "mm" : "cm";
-      target = unit === "mm" ? randomInt(2, 10) * 10 : randomInt(3, 20);
-      max = unit === "mm" ? 100 : 20; step = unit === "mm" ? 10 : 1;
+      target = randomInt(2, 9); unit = "cm"; max = 10; step = 1; divisions = 10; labelEvery = 1;
+    } else if (year === 4) {
+      target = randomInt(15, 95); unit = "mm"; max = 100; step = 1; divisions = 100; labelEvery = 10;
     } else {
-      unit = Math.random() < .35 ? "mm" : "cm";
-      target = unit === "mm" ? randomInt(15, 95) : randomInt(4, 19) / 2;
-      max = unit === "mm" ? 100 : 10; step = unit === "mm" ? 5 : .5;
+      target = randomInt(31, 95) / 10; unit = "cm"; max = 10; step = .1; divisions = 100; labelEvery = 10;
     }
-    return { mode: "length", activity: "measure", visual, target, unit, max, answer: target, options: numericOptions(target, step, step) };
+    return {
+      mode: "length", activity: "measure", visual, target, unit, max, divisions, labelEvery,
+      answer: target, options: numericOptions(target, step, step)
+    };
   }
 
   function makeMassBalance(targetValue, targetUnit) {
@@ -270,14 +285,22 @@
       unit = Math.random() < .5 ? "kg" : "g";
       target = unit === "kg" ? randomInt(1, 8) : randomInt(1, 9) * 100;
       step = unit === "kg" ? 1 : 100;
-    } else if (year <= 4) {
+    } else if (year === 3) {
       unit = Math.random() < .5 ? "kg" : "g";
-      target = unit === "kg" ? randomInt(2, 20) / 2 : randomInt(2, 20) * 50;
-      step = unit === "kg" ? .5 : 50;
-    } else {
+      target = unit === "kg" ? randomInt(1, 9) : randomInt(1, 9) * 100;
+      step = unit === "kg" ? 1 : 100;
+    } else if (year === 4) {
       unit = Math.random() < .55 ? "kg" : "g";
-      target = unit === "kg" ? randomInt(5, 80) / 4 : randomInt(2, 40) * 25;
-      step = unit === "kg" ? .25 : 25;
+      target = unit === "kg" ? randomInt(10, 90) / 10 : randomInt(1, 9) * 100;
+      step = unit === "kg" ? .1 : 100;
+    } else if (year === 5) {
+      unit = Math.random() < .6 ? "kg" : "g";
+      target = unit === "kg" ? randomInt(100, 900) / 100 : randomInt(10, 90) * 10;
+      step = unit === "kg" ? .01 : 10;
+    } else {
+      unit = Math.random() < .65 ? "kg" : "g";
+      target = unit === "kg" ? randomInt(1000, 9000) / 1000 : randomInt(100, 900);
+      step = unit === "kg" ? .001 : 1;
     }
     return { mode: "mass", activity: "balance", target, unit, answer: target, options: numericOptions(target, step, step) };
   }
@@ -290,32 +313,161 @@
     let step;
     let visual = "jug";
     if (targetValue != null) {
-      target = Number(targetValue); unit = targetUnit; max = Math.max(stepNice(target), target); step = decimalStep(target);
+      target = Number(targetValue); unit = targetUnit;
       visual = unit === "cups" ? "cups" : "jug";
+      if (unit === "cups") {
+        max = target; step = 1;
+      } else if (unit === "mL") {
+        if (year === 2) { max = 1000; step = 100; }
+        else if (year <= 4) { max = year === 3 ? 4000 : 5000; step = 100; }
+        else if (year === 5) { max = 3000; step = 50; }
+        else { max = 2000; step = 125; }
+      } else if (year === 2) {
+        max = 10; step = 1;
+      } else if (year <= 4) {
+        max = 5; step = .1;
+      } else if (year === 5) {
+        max = 3; step = .05;
+      } else {
+        max = 2; step = .125;
+      }
     } else if (year === 1) {
       target = randomInt(2, 8); unit = "cups"; max = target; step = 1; visual = "cups";
     } else if (year === 2) {
-      target = randomInt(1, 8); unit = "L"; max = 10; step = 1;
+      unit = Math.random() < .5 ? "L" : "mL";
+      target = unit === "L" ? randomInt(1, 9) : randomInt(1, 9) * 100;
+      max = unit === "L" ? 10 : 1000; step = unit === "L" ? 1 : 100;
     } else if (year === 3) {
-      target = randomInt(1, 9) * 100; unit = "mL"; max = 1000; step = 100;
+      target = randomInt(11, 39) * 100; unit = "mL"; max = 4000; step = 100;
+    } else if (year === 4) {
+      target = randomInt(11, 49) * 100; unit = "mL"; max = 5000; step = 100;
+    } else if (year === 5) {
+      target = randomItem([.3, .5, .7, .75, 1.25, 1.5, 1.75, 2.5, 2.75]); unit = "L"; max = 3; step = .1;
     } else {
-      unit = Math.random() < .55 ? "mL" : "L";
-      target = unit === "mL" ? randomInt(1, 19) * 50 : randomInt(2, 19) / 10;
-      max = unit === "mL" ? 1000 : 2; step = unit === "mL" ? 50 : .1;
+      target = randomItem([.125, .25, .375, .5, .625, .75, 1.125, 1.25, 1.5, 1.75]); unit = "L"; max = 2; step = .125;
     }
-    return { mode: "capacity", activity: "read", visual, target, unit, max, answer: target, options: numericOptions(target, step, step) };
+    const divisions = visual === "cups" ? target
+      : year === 2 ? 10
+      : year === 3 ? (unit === "L" ? 50 : 40)
+      : year === 4 ? 50
+      : year === 5 ? 60
+      : 16;
+    return {
+      mode: "capacity", activity: "read", visual, target: round(target), unit, max, divisions,
+      majorEvery: year === 5 ? 20 : undefined,
+      answer: round(target), options: numericOptions(target, step, step)
+    };
+  }
+
+  function makeCapacityCompare(firstValue, secondValue, customUnit) {
+    const year = Number(state.level.slice(1));
+    if (firstValue != null && secondValue != null) {
+      const base = makeCompareQuestion("capacity", firstValue, secondValue, customUnit);
+      let max;
+      let divisions;
+      if (customUnit === "cups") {
+        max = Math.max(Number(firstValue), Number(secondValue)); divisions = 1;
+      } else if (customUnit === "mL") {
+        if (year === 2) { max = 1000; divisions = 10; }
+        else if (year === 3) { max = 4000; divisions = 40; }
+        else if (year === 4) { max = 5000; divisions = 50; }
+        else if (year === 5) { max = 3000; divisions = 60; }
+        else { max = 2000; divisions = 16; }
+      } else if (year === 2) {
+        max = 10; divisions = 10;
+      } else if (year <= 4) {
+        max = 5; divisions = 50;
+      } else if (year === 5) {
+        max = 3; divisions = 60;
+      } else {
+        max = 2; divisions = 16;
+      }
+      return {
+        ...base,
+        visual: customUnit === "cups" ? "cups" : "jug",
+        max,
+        divisions
+      };
+    }
+
+    let a;
+    let b;
+    let unit;
+    let visual = "jug";
+    let max;
+    let divisions;
+    let displayAValue;
+    let displayAUnit;
+    let displayBValue;
+    let displayBUnit;
+
+    if (year === 1) {
+      a = randomInt(3, 8); b = randomInt(2, 7); unit = "cups"; visual = "cups"; max = Math.max(a, b); divisions = 1;
+    } else if (year === 2) {
+      a = randomInt(3, 9); b = randomInt(1, 7); unit = "L"; max = 10; divisions = 10;
+    } else if (year === 3) {
+      a = randomInt(11, 39) * 100; b = randomInt(10, 38) * 100; unit = "mL"; max = 4000; divisions = 40;
+    } else if (year === 4) {
+      a = randomInt(11, 49) * 100;
+      b = Math.max(100, Math.min(4900, a + randomItem([-300, -200, -100, 100, 200, 300])));
+      unit = "mL"; max = 5000; divisions = 50;
+    } else {
+      a = randomInt(year === 5 ? 8 : 10, year === 5 ? 36 : 76) * (year === 5 ? 50 : 25);
+      b = Math.max(25, Math.min(1975, a + randomItem(year === 5 ? [-200, -150, -100, 100, 150, 200] : [-75, -50, -25, 25, 50, 75])));
+      unit = "mL"; max = 2000; divisions = year === 5 ? 20 : 40;
+      displayAUnit = Math.random() < .5 ? "L" : "mL";
+      displayBUnit = displayAUnit === "L" ? "mL" : "L";
+      displayAValue = displayAUnit === "L" ? round(a / 1000) : a;
+      displayBValue = displayBUnit === "L" ? round(b / 1000) : b;
+    }
+
+    if (a === b) b = Math.max(1, b - (year >= 4 ? 50 : 1));
+    const objective = randomItem(["more", "less"]);
+    const answer = objective === "more" ? (a > b ? "A" : "B") : (a < b ? "A" : "B");
+    return {
+      mode: "capacity", activity: "compare", a, b, unit, visual, max, divisions,
+      displayAValue, displayAUnit, displayBValue, displayBUnit,
+      objective, answer, options: ["A", "B"]
+    };
   }
 
   function makeCompareQuestion(mode, firstValue, secondValue, customUnit) {
     const year = Number(state.level.slice(1));
     let a = firstValue == null ? randomInt(3, 9) : Number(firstValue);
     let b = secondValue == null ? randomInt(2, 8) : Number(secondValue);
-    if (a === b) b += 1;
+    let unit = customUnit;
+    if (firstValue == null && mode === "length") {
+      if (year === 1) unit = "blocks";
+      else if (year <= 3) unit = "cm";
+      else if (year === 4) {
+        unit = "mm"; a = randomInt(20, 90); b = randomInt(10, 80);
+      } else {
+        unit = "cm"; a = randomInt(30, 90) / 10; b = randomInt(20, 80) / 10;
+      }
+    }
+    if (firstValue == null && mode === "mass") {
+      if (year === 1) unit = "units";
+      else if (year <= 3) unit = "kg";
+      else if (year === 4) {
+        unit = "kg"; a = randomInt(20, 90) / 10; b = randomInt(10, 80) / 10;
+      } else if (year === 5) {
+        unit = "kg"; a = randomInt(200, 900) / 100; b = randomInt(100, 800) / 100;
+      } else {
+        unit = "kg"; a = randomInt(2000, 9000) / 1000; b = randomInt(1000, 8000) / 1000;
+      }
+    }
+    if (a === b) {
+      let bump = 1;
+      if (mode === "length" && year >= 5) bump = .1;
+      if (mode === "mass" && year === 4) bump = .1;
+      if (mode === "mass" && year === 5) bump = .01;
+      if (mode === "mass" && year >= 6) bump = .001;
+      b = round(b + bump);
+    }
     const objectiveOptions = mode === "length" ? ["longer", "shorter"] : mode === "mass" ? ["heavier", "lighter"] : ["more", "less"];
     const objective = randomItem(objectiveOptions);
     const seeksLarger = ["longer", "heavier", "more"].includes(objective);
     const answer = seeksLarger ? (a > b ? "A" : "B") : (a < b ? "A" : "B");
-    let unit = customUnit;
     if (!unit) {
       if (mode === "length") unit = year === 1 ? "blocks" : "cm";
       if (mode === "mass") unit = year === 1 ? "units" : "kg";
@@ -334,7 +486,7 @@
     } else {
       const year = Number(state.level.slice(1));
       let pairs;
-      if (category === "length") pairs = year <= 2 ? [["m", "cm"]] : [["cm", "mm"], ["m", "cm"], ["km", "m"]];
+      if (category === "length") pairs = year <= 3 ? [["m", "cm"]] : [["cm", "mm"], ["m", "cm"], ["km", "m"]];
       else if (category === "mass") pairs = [["kg", "g"]];
       else pairs = [["L", "mL"]];
       const [big, small] = randomItem(pairs);
@@ -342,8 +494,24 @@
       fromUnit = reverse ? small : big;
       toUnit = reverse ? big : small;
       const factor = unitFactors[fromUnit] / unitFactors[toUnit];
-      if (reverse) value = randomInt(1, 9) * Math.round(1 / factor);
-      else value = year >= 5 && Math.random() < .45 ? randomItem([.25, .5, 1.25, 1.5, 2.5]) : randomInt(1, 9);
+      if (year >= 5 && reverse) {
+        if (category === "length" && big === "cm") value = randomItem([25, 47, 84, 206, 365, 453, 908]);
+        else if (category === "length" && big === "m") value = randomItem([19, 39, 75, 137, 580, 920]);
+        else if (category === "length") value = randomItem([2043, 6005, 10300, 42195]);
+        else if (category === "mass") value = randomItem([1800, 2750, 3070, 5800, 6900]);
+        else value = randomItem([300, 500, 700, 750, 2750, 6025]);
+      } else if (reverse) {
+        const relation = Math.round(1 / factor);
+        value = randomInt(1, 9) * relation;
+      } else if (year >= 5) {
+        let decimalValues;
+        if (category === "length" && big === "cm") decimalValues = [3.1, 4.7, 8.4, 9.2, 20.6, 36.5];
+        else if (category === "length" && big === "m") decimalValues = [.19, .39, .75, 1.25, 1.37, 5.8];
+        else if (category === "length") decimalValues = [1.025, 2.043, 3.75, 5.002, 42.195];
+        else if (category === "mass") decimalValues = [.25, 1.8, 2.75, 3.07, 5.8];
+        else decimalValues = [.3, .5, .7, .75, 1.25, 2.75, 6.025];
+        value = randomItem(decimalValues);
+      } else value = randomInt(1, 9);
     }
     const answer = round(value * unitFactors[fromUnit] / unitFactors[toUnit], 6);
     return { mode: "convert", activity: "convert", category, value, fromUnit, toUnit, answer };
@@ -370,6 +538,8 @@
     howToText.textContent = t().howTo[state.mode];
     teacherIntro.textContent = t().teacherIntro;
     levelBadge.textContent = state.level.toUpperCase();
+    const d1Option = levelSelect.querySelector('option[value="d1"]');
+    if (d1Option) d1Option.disabled = state.mode === "convert";
     const steps = state.mode === "convert" ? t().convertSteps : t().steps;
     stepTexts.forEach((element, index) => { element.textContent = steps[index]; });
     updateActivityOptions();
@@ -438,7 +608,6 @@
       lab.className = "block-lab";
       const object = document.createElement("div");
       object.className = "block-object";
-      object.style.width = `${Math.min(92, q.target * 10)}%`;
       const blocks = document.createElement("div");
       blocks.className = "measure-blocks";
       for (let i = 0; i < q.target; i += 1) {
@@ -459,16 +628,20 @@
     objectArea.append(object);
     const ruler = document.createElement("div");
     ruler.className = "ruler";
-    for (let i = 0; i <= 20; i += 1) {
+    const divisions = q.divisions || 10;
+    const labelEvery = q.labelEvery || Math.max(1, Math.round(divisions / 10));
+    for (let i = 0; i <= divisions; i += 1) {
+      const isMajor = i % labelEvery === 0;
+      const isMiddle = !isMajor && labelEvery >= 10 && i % (labelEvery / 2) === 0;
       const tick = document.createElement("span");
-      tick.className = `ruler-tick${i % 2 ? " half" : ""}`;
-      tick.style.left = `${i * 5}%`;
+      tick.className = `ruler-tick ${isMajor ? "major" : isMiddle ? "middle" : "minor"}`;
+      tick.style.left = `${i / divisions * 100}%`;
       ruler.append(tick);
-      if (i % 2 === 0) {
+      if (isMajor) {
         const number = document.createElement("span");
         number.className = "ruler-number";
-        number.style.left = `${i * 5}%`;
-        number.textContent = formatValue(q.max * i / 20);
+        number.style.left = `${i / divisions * 100}%`;
+        number.textContent = formatValue(q.max * i / divisions);
         ruler.append(number);
       }
     }
@@ -519,9 +692,9 @@
     const base = element("div", "balance-base");
     const leftPan = element("div", "pan pan-left");
     const rightPan = element("div", "pan pan-right");
-    const mystery = element("span", "pan-token unknown", "?");
+    const mystery = element("span", "pan-token unknown", "📦");
     mystery.setAttribute("aria-label", t().mysteryMass);
-    const weight = element("span", "pan-token", state.selected == null ? "?" : measurementText(state.selected, q.unit));
+    const weight = element("span", `pan-token${state.selected == null ? " choose-weight" : ""}`, state.selected == null ? t().chooseWeight : measurementText(state.selected, q.unit));
     leftPan.append(mystery);
     rightPan.append(weight);
     scene.append(beam, pivot, stand, base, leftPan, rightPan);
@@ -536,30 +709,50 @@
       return row;
     }
     const lab = element("div", "jug-lab");
-    lab.append(createJug(q.target, q.max, t().container));
+    lab.append(createJug(q.target, q.max, t().container, true, q.divisions, q.majorEvery));
     return lab;
   }
 
   function renderCapacityCompare(q) {
+    if (q.visual === "cups") {
+      const lab = element("div", "cup-compare-lab");
+      [["A", q.a], ["B", q.b]].forEach(([letter, count]) => {
+        const group = element("div", "cup-compare-group");
+        group.append(element("span", "item-letter", letter));
+        const row = element("div", "cup-row");
+        for (let index = 0; index < count; index += 1) row.append(element("span", "cup-icon"));
+        group.append(row);
+        lab.append(group);
+      });
+      return lab;
+    }
     const lab = element("div", "jug-lab");
-    const max = Math.max(q.a, q.b) * 1.15;
-    lab.append(createJug(q.a, max, "A", false), createJug(q.b, max, "B", false));
+    const max = q.max || Math.max(q.a, q.b) * 1.15;
+    const captionA = q.displayAValue != null ? `A · ${measurementText(q.displayAValue, q.displayAUnit)}` : "A";
+    const captionB = q.displayBValue != null ? `B · ${measurementText(q.displayBValue, q.displayBUnit)}` : "B";
+    lab.append(
+      createJug(q.a, max, captionA, false, q.divisions || 10, q.majorEvery),
+      createJug(q.b, max, captionB, false, q.divisions || 10, q.majorEvery)
+    );
     return lab;
   }
 
-  function createJug(value, max, caption, showLabels = true) {
+  function createJug(value, max, caption, showLabels = true, divisions = 10, requestedMajorEvery) {
     const wrap = element("div", "jug-wrap");
     const jug = element("div", "jug");
     const water = element("div", "water");
-    water.style.setProperty("--fill", `${Math.max(4, Math.min(98, value / max * 100))}%`);
+    water.style.setProperty("--fill", `${Math.max(0, Math.min(96, value / max * 96))}%`);
     jug.append(water);
-    for (let i = 0; i <= 4; i += 1) {
-      const mark = element("span", `jug-mark${i % 2 === 0 ? " major" : ""}`);
-      mark.style.bottom = `${i * 24}%`;
+    const majorEvery = requestedMajorEvery || (divisions % 4 === 0 ? divisions / 4 : divisions % 5 === 0 ? divisions / 5 : Math.max(1, Math.round(divisions / 4)));
+    for (let i = 0; i <= divisions; i += 1) {
+      const isMajor = i % majorEvery === 0;
+      const isMiddle = !isMajor && majorEvery % 4 === 0 && i % (majorEvery / 4) === 0;
+      const mark = element("span", `jug-mark ${isMajor ? "major" : isMiddle ? "middle" : "minor"}`);
+      mark.style.bottom = `${i / divisions * 96}%`;
       jug.append(mark);
-      if (showLabels && i % 2 === 0) {
-        const label = element("span", "jug-mark-label", formatValue(max * i / 4));
-        label.style.bottom = `${Math.min(92, i * 24)}%`;
+      if (showLabels && isMajor) {
+        const label = element("span", "jug-mark-label", formatValue(max * i / divisions));
+        label.style.bottom = `${i === 0 ? 3 : Math.min(92, i / divisions * 96)}%`;
         jug.append(label);
       }
     }
@@ -664,7 +857,12 @@
       state.wrongSelection = null;
       let explanation;
       if (q.mode === "convert") explanation = `${measurementText(q.value, q.fromUnit)} = ${measurementText(q.answer, q.toUnit)}`;
-      else if (q.activity === "compare") explanation = `${q.answer}: ${measurementText(q.answer === "A" ? q.a : q.b, q.unit)}`;
+      else if (q.activity === "compare") {
+        const choseA = q.answer === "A";
+        const displayValue = choseA ? q.displayAValue : q.displayBValue;
+        const displayMeasureUnit = choseA ? q.displayAUnit : q.displayBUnit;
+        explanation = `${q.answer}: ${displayValue != null ? measurementText(displayValue, displayMeasureUnit) : measurementText(choseA ? q.a : q.b, q.unit)}`;
+      }
       else explanation = measurementText(q.answer, q.unit);
       setFeedback(`<strong>${t().correct}</strong> <span class="explain-part">${explanation}</span>`, "success", true);
       playSuccess(); celebrate(); renderConcept(); renderAnswerZone(); updateCheckButton();
@@ -735,8 +933,9 @@
     teacherFields.replaceChildren();
     if (state.mode === "convert") {
       addTeacherField(t().value, "teacherValue", "number");
-      addTeacherField(t().fromUnit, "teacherFromUnit", "select", unitGroups[state.category]);
-      addTeacherField(t().toUnit, "teacherToUnit", "select", unitGroups[state.category]);
+      const units = conversionUnits();
+      addTeacherField(t().fromUnit, "teacherFromUnit", "select", units);
+      addTeacherField(t().toUnit, "teacherToUnit", "select", units);
       const selects = teacherFields.querySelectorAll("select");
       if (selects[1]) selects[1].selectedIndex = 1;
       return;
@@ -749,9 +948,94 @@
     addTeacherField(t().unit, "teacherUnit", "select", teacherUnits());
   }
   function teacherUnits() {
-    if (state.mode === "length") return ["blocks", "mm", "cm", "m", "km"];
-    if (state.mode === "mass") return ["units", "g", "kg"];
-    return ["cups", "mL", "L"];
+    const year = Number(state.level.slice(1));
+    if (state.mode === "length") {
+      if (year === 1) return ["blocks"];
+      if (year <= 3) return ["cm"];
+      if (year === 4) return ["mm"];
+      return ["cm", "mm"];
+    }
+    if (state.mode === "mass") return year === 1 ? ["units"] : ["g", "kg"];
+    return year === 1 ? ["cups"] : ["mL", "L"];
+  }
+  function conversionUnits() {
+    const year = Number(state.level.slice(1));
+    if (state.category === "length") return year <= 3 ? ["cm", "m"] : ["mm", "cm", "m", "km"];
+    return unitGroups[state.category];
+  }
+  function isOnStep(value, step) {
+    return Math.abs(value / step - Math.round(value / step)) < .000001;
+  }
+  function teacherScaleMessage() {
+    if (state.lang === "zh") return "这个数值不符合该年级课本使用的单位、范围或最小刻度。";
+    if (state.lang === "en") return "This value does not match the unit, range, or smallest scale division used at this level.";
+    return "Nilai ini tidak sepadan dengan unit, julat atau senggatan terkecil untuk tahap ini.";
+  }
+  function isTeacherMeasureAllowed(value, unit) {
+    const year = Number(state.level.slice(1));
+    if (state.mode === "length" && activity() === "measure") {
+      if (year === 1) return unit === "blocks" && Number.isInteger(value) && value <= 10;
+      if (year <= 3) return unit === "cm" && Number.isInteger(value) && value <= 10;
+      if (year === 4) return unit === "mm" && Number.isInteger(value) && value <= 100;
+      return (unit === "cm" && value <= 10 && isOnStep(value, .1))
+        || (unit === "mm" && value <= 100 && Number.isInteger(value));
+    }
+    if (state.mode === "mass" && activity() === "balance") {
+      if (year === 1) return unit === "units" && Number.isInteger(value) && value <= 10;
+      const step = unit === "g" ? (year <= 4 ? 100 : year === 5 ? 10 : 1)
+        : (year <= 3 ? 1 : year === 4 ? .1 : year === 5 ? .01 : .001);
+      return isOnStep(value, step);
+    }
+    if (state.mode === "capacity" && activity() === "read") {
+      if (year === 1) return unit === "cups" && Number.isInteger(value) && value <= 10;
+      const limit = unit === "mL" ? (year === 2 ? 1000 : year === 3 ? 4000 : year === 4 ? 5000 : year === 5 ? 3000 : 2000)
+        : (year === 2 ? 10 : year <= 4 ? 5 : year === 5 ? 3 : 2);
+      const step = unit === "mL" ? (year <= 4 ? 100 : year === 5 ? 50 : 125)
+        : (year === 2 ? 1 : year <= 4 ? .1 : year === 5 ? .05 : .125);
+      return value <= limit && isOnStep(value, step);
+    }
+    return true;
+  }
+  function isTeacherCompareAllowed(value, unit) {
+    const year = Number(state.level.slice(1));
+    if (state.mode === "length") {
+      if (year === 1) return unit === "blocks" && Number.isInteger(value) && value <= 10;
+      if (year <= 3) return unit === "cm" && Number.isInteger(value) && value <= 10;
+      if (year === 4) return unit === "mm" && Number.isInteger(value) && value <= 100;
+      return (unit === "cm" && value <= 10 && isOnStep(value, .1))
+        || (unit === "mm" && value <= 100 && Number.isInteger(value));
+    }
+    if (state.mode === "mass") {
+      if (year === 1) return unit === "units" && Number.isInteger(value) && value <= 10;
+      const step = unit === "g" ? (year <= 4 ? 100 : year === 5 ? 10 : 1)
+        : (year <= 3 ? 1 : year === 4 ? .1 : year === 5 ? .01 : .001);
+      return isOnStep(value, step);
+    }
+    if (year === 1) return unit === "cups" && Number.isInteger(value) && value <= 10;
+    const limit = unit === "mL" ? (year === 2 ? 1000 : year === 3 ? 4000 : year === 4 ? 5000 : year === 5 ? 3000 : 2000)
+      : (year === 2 ? 10 : year <= 4 ? 5 : year === 5 ? 3 : 2);
+    const step = unit === "mL" ? (year <= 4 ? 100 : year === 5 ? 50 : 125)
+      : (year === 2 ? 1 : year <= 4 ? .1 : year === 5 ? .05 : .125);
+    return value <= limit && isOnStep(value, step);
+  }
+  function isConversionPairAllowed(fromUnit, toUnit) {
+    if (fromUnit === toUnit) return false;
+    if (state.category !== "length") return true;
+    const pair = [fromUnit, toUnit].sort().join("-");
+    const year = Number(state.level.slice(1));
+    if (year <= 3) return pair === "cm-m";
+    return ["cm-mm", "cm-m", "km-m"].includes(pair);
+  }
+  function isTeacherConversionValueAllowed(value, fromUnit, toUnit) {
+    const year = Number(state.level.slice(1));
+    const fromFactor = unitFactors[fromUnit];
+    const toFactor = unitFactors[toUnit];
+    if (fromFactor > toFactor) {
+      const step = year >= 5 ? toFactor / fromFactor : 1;
+      return isOnStep(value, step);
+    }
+    const relation = toFactor / fromFactor;
+    return year >= 5 ? Number.isInteger(value) : isOnStep(value, relation);
   }
   function readValidValue(id) {
     const value = Number(document.getElementById(id)?.value);
@@ -764,18 +1048,24 @@
       const fromUnit = document.getElementById("teacherFromUnit").value;
       const toUnit = document.getElementById("teacherToUnit").value;
       if (value == null) { teacherError.textContent = t().invalid; return; }
-      if (fromUnit === toUnit) { teacherError.textContent = t().differentUnits; return; }
+      if (!isConversionPairAllowed(fromUnit, toUnit)) { teacherError.textContent = t().differentUnits; return; }
+      if (!isTeacherConversionValueAllowed(value, fromUnit, toUnit)) { teacherError.textContent = teacherScaleMessage(); return; }
       question = makeConversion(value, fromUnit, toUnit);
     } else if (activity() === "compare") {
       const a = readValidValue("teacherValueA");
       const b = readValidValue("teacherValueB");
       if (a == null || b == null) { teacherError.textContent = t().invalid; return; }
       if (a === b) { teacherError.textContent = t().unequal; return; }
-      question = makeCompareQuestion(state.mode, a, b, document.getElementById("teacherUnit").value);
+      const unit = document.getElementById("teacherUnit").value;
+      if (!isTeacherCompareAllowed(a, unit) || !isTeacherCompareAllowed(b, unit)) { teacherError.textContent = teacherScaleMessage(); return; }
+      question = state.mode === "capacity"
+        ? makeCapacityCompare(a, b, unit)
+        : makeCompareQuestion(state.mode, a, b, unit);
     } else {
       const value = readValidValue("teacherValue");
       const unit = document.getElementById("teacherUnit").value;
       if (value == null) { teacherError.textContent = t().invalid; return; }
+      if (!isTeacherMeasureAllowed(value, unit)) { teacherError.textContent = teacherScaleMessage(); return; }
       if (state.mode === "length") question = makeLengthMeasure(value, unit);
       else if (state.mode === "mass") question = makeMassBalance(value, unit);
       else question = makeCapacityRead(value, unit);
